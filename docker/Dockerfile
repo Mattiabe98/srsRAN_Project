@@ -93,6 +93,10 @@ FROM ubuntu:$OS_VERSION
 ARG UHD_VERSION
 ARG DPDK_VERSION
 
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes libzmq3-dev
+
 # Copy srsRAN binaries and libraries installed in previous stage
 COPY --from=builder /opt/uhd/${UHD_VERSION}   /opt/uhd/${UHD_VERSION}
 COPY --from=builder /opt/dpdk/${DPDK_VERSION} /opt/dpdk/${DPDK_VERSION}
