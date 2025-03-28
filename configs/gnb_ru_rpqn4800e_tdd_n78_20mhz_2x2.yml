@@ -41,7 +41,7 @@ ru_ofh:
       vlan_tag_cp: 2
       vlan_tag_up: 2
       prach_port_id: [4, 5, 6, 7]
-      dl_port_id: [0, 1]
+      dl_port_id: [0]
       ul_port_id: [0, 1, 2, 3]
 
 cell_cfg:
