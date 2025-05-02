@@ -21,7 +21,6 @@
  */
 
 #include "pdcp_entity_tx.h"
-
 #include "../security/security_engine_impl.h"
 #include "srsran/instrumentation/traces/up_traces.h"
 #include "srsran/support/bit_encoding.h"
@@ -36,7 +35,7 @@ pdcp_entity_tx::pdcp_entity_tx(uint32_t                        ue_index,
                                pdcp_tx_config                  cfg_,
                                pdcp_tx_lower_notifier&         lower_dn_,
                                pdcp_tx_upper_control_notifier& upper_cn_,
-                               timer_factory                   ue_dl_timer_factory_,
+                               timer_factory                   ue_ctrl_timer_factory_,
                                task_executor&                  ue_dl_executor_,
                                task_executor&                  crypto_executor_,
                                pdcp_metrics_aggregator&        metrics_agg_) :
@@ -45,14 +44,15 @@ pdcp_entity_tx::pdcp_entity_tx(uint32_t                        ue_index,
   cfg(cfg_),
   lower_dn(lower_dn_),
   upper_cn(upper_cn_),
-  ue_dl_timer_factory(ue_dl_timer_factory_),
+  ue_ctrl_timer_factory(ue_ctrl_timer_factory_),
   ue_dl_executor(ue_dl_executor_),
   crypto_executor(crypto_executor_),
   tx_window(cfg.rb_type, cfg.rlc_mode, cfg.sn_size, logger),
+  metrics(metrics_agg_.get_metrics_period().count()),
   metrics_agg(metrics_agg_)
 {
   if (metrics_agg.get_metrics_period().count()) {
-    metrics_timer = ue_dl_timer_factory.create_timer();
+    metrics_timer = ue_ctrl_timer_factory.create_timer();
     metrics_timer.set(std::chrono::milliseconds(metrics_agg.get_metrics_period().count()), [this](timer_id_t tid) {
       if (stopped) {
         return;
@@ -78,7 +78,7 @@ pdcp_entity_tx::pdcp_entity_tx(uint32_t                        ue_index,
 
   logger.log_info("PDCP configured. {}", cfg);
 
-  discard_timer = ue_dl_timer_factory.create_timer();
+  discard_timer = ue_ctrl_timer_factory.create_timer();
 
   // TODO: implement usage of crypto_executor
   (void)ue_dl_executor;
@@ -500,7 +500,7 @@ void pdcp_entity_tx::configure_security(security::sec_128_as_config sec_cfg,
     logger.log_info("128 K_int: {}", sec_cfg.k_128_int.value());
   }
   logger.log_info("128 K_enc: {}", sec_cfg.k_128_enc);
-};
+}
 
 /*
  * Status report and data recovery
@@ -834,8 +834,11 @@ void pdcp_entity_tx::stop_discard_timer(uint32_t highest_count)
     logger.log_debug("Cannot stop discard timers. No discard timer configured. highest_count={}", highest_count);
     return;
   }
+
+  // Transmission or delivery notification arrived for a COUNT that is outside of the TX_WINDOW.
+  // This can happen if the notification arrived after the discard timer has expired.
   if (highest_count < st.tx_next_ack || highest_count >= st.tx_next) {
-    logger.log_warning("Cannot stop discard timers. highest_count={} is outside tx_window. {}", highest_count, st);
+    logger.log_debug("Cannot stop discard timers. highest_count={} is outside tx_window. {}", highest_count, st);
     return;
   }
   logger.log_debug("Stopping discard timers. highest_count={}", highest_count);
@@ -914,6 +917,10 @@ void pdcp_entity_tx::discard_pdu(uint32_t count)
 // Discard Timer Callback (discardTimer)
 void pdcp_entity_tx::discard_callback()
 {
+  if (stopped) {
+    logger.log_debug("Discard timer expired after bearer was stopped. st={}", st);
+    return;
+  }
   logger.log_debug("Discard timer expired. st={}", st);
 
   // Add discard to metrics.

@@ -24,6 +24,7 @@
 
 #include "srsran/phy/lower/lower_phy_configuration.h"
 #include "srsran/radio/radio_configuration.h"
+#include "srsran/ru/ru_error_notifier.h"
 #include "srsran/ru/ru_timing_notifier.h"
 #include "srsran/ru/ru_uplink_plane.h"
 
@@ -31,6 +32,8 @@ namespace srsran {
 
 /// Radio Unit generic configuration.
 struct ru_generic_configuration {
+  /// Metrics enabled flag.
+  bool are_metrics_enabled;
   /// Maximum number of PRACH concurrent requests.
   unsigned max_nof_prach_concurrent_requests = 11;
   /// Device driver.
@@ -47,12 +50,8 @@ struct ru_generic_configuration {
   ru_uplink_plane_rx_symbol_notifier* symbol_notifier = nullptr;
   /// Radio Unit timing notifier.
   ru_timing_notifier* timing_notifier = nullptr;
-  /// Statistics printer executor.
-  task_executor* statistics_printer_executor = nullptr;
-  /// \brief Statistics print interval in seconds.
-  ///
-  /// The statistics of the generic Radio Unit implementation will be printed every statistics_print_interval_s seconds.
-  unsigned statistics_print_interval_s = 1;
+  /// Radio Unit error notifier.
+  ru_error_notifier* error_notifier = nullptr;
 };
 
 } // namespace srsran

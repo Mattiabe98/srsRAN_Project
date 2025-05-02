@@ -21,7 +21,7 @@
  */
 
 #include "split6_o_du_factory.h"
-#include "apps/services/e2/e2_metric_connector_manager.h"
+#include "apps/helpers/e2/e2_metric_connector_manager.h"
 #include "apps/services/worker_manager/worker_manager.h"
 #include "apps/units/flexible_o_du/flexible_o_du_commands.h"
 #include "apps/units/flexible_o_du/o_du_high/du_high/du_high_config_translators.h"
@@ -42,7 +42,7 @@ o_du_unit srsran::create_o_du_split6(const split6_o_du_unit_config&             
       e2_metric_connector_manager<e2_du_metrics_connector, e2_du_metrics_notifier, e2_du_metrics_interface>>(
       du_unit_cfg.odu_high_cfg.du_high_cfg.config.cells_cfg.size());
 
-  o_du_high_unit_dependencies odu_hi_unit_dependencies = {du_dependencies.workers->get_du_high_executor_mapper(0),
+  o_du_high_unit_dependencies odu_hi_unit_dependencies = {du_dependencies.workers->get_du_high_executor_mapper(),
                                                           *du_dependencies.f1c_client_handler,
                                                           *du_dependencies.f1u_gw,
                                                           *du_dependencies.timer_mng,

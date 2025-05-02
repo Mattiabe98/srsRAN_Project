@@ -64,14 +64,16 @@ private:
     ran_slice_instance                inst;
     std::unique_ptr<scheduler_policy> policy;
 
-    ran_slice_sched_context(ran_slice_id_t id, const cell_configuration& cell_cfg, const slice_rrm_policy_config& cfg) :
-      inst(id, cell_cfg, cfg)
+    ran_slice_sched_context(ran_slice_id_t                    id,
+                            const cell_configuration&         cell_cfg,
+                            const slice_rrm_policy_config&    cfg,
+                            std::unique_ptr<scheduler_policy> policy_) :
+      inst(id, cell_cfg, cfg), policy(std::move(policy_))
     {
     }
 
     /// Determines the slice candidate priority.
-    priority_type
-    get_prio(bool is_dl, slot_point pdcch_slot, slot_point pxsch_slot, unsigned nof_slices, bool slice_resched) const;
+    priority_type get_prio(bool is_dl, slot_point pdcch_slot, slot_point pxsch_slot, bool slice_resched) const;
   };
 
   struct slice_candidate_context {
@@ -103,6 +105,8 @@ private:
       // Access to underlying vector.
       this->c.clear();
     }
+
+    void reserve(size_t capacity) { c.reserve(capacity); }
 
     // Adapter of the priority_queue push method to avoid adding candidates with skip priority level.
     void push(const slice_candidate_context& elem)

@@ -75,7 +75,7 @@ rlc_tx_um_entity::rlc_tx_um_entity(gnb_du_id_t                          du_id,
 void rlc_tx_um_entity::handle_sdu(byte_buffer sdu_buf, bool is_retx)
 {
   rlc_sdu sdu_;
-  sdu_.time_of_arrival = std::chrono::high_resolution_clock::now();
+  sdu_.time_of_arrival = std::chrono::steady_clock::now();
 
   sdu_.buf     = std::move(sdu_buf);
   sdu_.pdcp_sn = get_pdcp_sn(sdu_.buf, cfg.pdcp_sn_len, /* is_srb = */ false, logger.get_basic_logger());
@@ -208,8 +208,8 @@ size_t rlc_tx_um_entity::pull_pdu(span<uint8_t> mac_sdu_buf)
     sdu.buf.clear();
     next_so = 0;
     if (metrics_low.is_enabled()) {
-      auto sdu_latency = std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::high_resolution_clock::now() - sdu.time_of_arrival);
+      auto sdu_latency =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - sdu.time_of_arrival);
       metrics_low.metrics_add_sdu_latency_us(sdu_latency.count() / 1000);
       metrics_low.metrics_add_pulled_sdus(1);
     }
@@ -301,8 +301,10 @@ void rlc_tx_um_entity::update_mac_buffer_state()
 {
   pending_buffer_state.clear(std::memory_order_seq_cst);
   rlc_buffer_state bs = get_buffer_state();
-  if (bs.pending_bytes <= MAX_DL_PDU_LENGTH || prev_buffer_state.pending_bytes <= MAX_DL_PDU_LENGTH) {
+  if (bs.pending_bytes <= MAX_DL_PDU_LENGTH || prev_buffer_state.pending_bytes <= MAX_DL_PDU_LENGTH ||
+      suspend_bs_notif_barring) {
     logger.log_debug("Sending buffer state update to lower layer. bs={}", bs);
+    suspend_bs_notif_barring = false;
     lower_dn.on_buffer_state_update(bs);
   } else {
     logger.log_debug(
@@ -335,5 +337,8 @@ rlc_buffer_state rlc_tx_um_entity::get_buffer_state()
   }
 
   bs.pending_bytes = queue_bytes + segment_bytes;
+  if (bs.pending_bytes <= MAX_DL_PDU_LENGTH) {
+    suspend_bs_notif_barring = true;
+  }
   return bs;
 }

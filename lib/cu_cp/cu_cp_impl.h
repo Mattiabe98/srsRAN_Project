@@ -40,7 +40,7 @@
 #include "srsran/cu_cp/cu_cp_configuration.h"
 #include "srsran/cu_cp/cu_cp_types.h"
 #include "srsran/e2/e2_cu.h"
-#include "srsran/e2/e2_cu_factory.h"
+#include "srsran/e2/e2_cu_up_factory.h"
 #include "srsran/f1ap/cu_cp/f1ap_cu.h"
 #include "srsran/nrppa/nrppa.h"
 #include "srsran/ran/plmn_identity.h"
@@ -124,7 +124,7 @@ public:
   ue_index_t       handle_ue_index_allocation_request(const nr_cell_global_id_t& cgi) override;
   void handle_dl_ue_associated_nrppa_transport_pdu(ue_index_t ue_index, const byte_buffer& nrppa_pdu) override;
   void handle_dl_non_ue_associated_nrppa_transport_pdu(amf_index_t amf_index, const byte_buffer& nrppa_pdu) override;
-  void handle_n2_disconnection() override;
+  void handle_n2_disconnection(amf_index_t amf_index) override;
 
   // cu_cp_nrppa_handler.
   nrppa_cu_cp_ue_notifier* handle_new_nrppa_ue(ue_index_t ue_index) override;
@@ -242,7 +242,7 @@ private:
   paging_message_handler paging_handler;
 
   // AMF connections beeing managed by the CU-CP.
-  std::unique_ptr<ngap_repository> ngap_db;
+  ngap_repository ngap_db;
 
   // Handler of the CU-CP connections to other remote nodes (e.g. AMF, CU-UPs, DUs).
   std::unique_ptr<cu_cp_controller> controller;

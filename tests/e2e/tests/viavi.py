@@ -63,6 +63,7 @@ class _ViaviConfiguration:
     test_name: str = ""
     test_timeout: int = 0
     gnb_extra_commands: str = ""
+    retina_params: dict = field(default_factory=dict)
     # test/fail criteria
     expected_ul_bitrate: float = 0
     expected_dl_bitrate: float = 0
@@ -102,6 +103,7 @@ def load_yaml_config(config_filename: str) -> List[_ViaviConfiguration]:
                 test_name=test_declaration["test_name"],
                 test_timeout=test_declaration["test_timeout"],
                 gnb_extra_commands=_convert_extra_config_into_command(test_declaration["gnb_extra_config"]),
+                retina_params=test_declaration.get("retina_params", {}),
                 expected_dl_bitrate=test_declaration["expected_dl_bitrate"],
                 expected_ul_bitrate=test_declaration["expected_ul_bitrate"],
                 expected_nof_kos=test_declaration["expected_nof_kos"],
@@ -375,6 +377,7 @@ def _test_viavi(
                     if test_declaration.warning_allowlist
                     else ""
                 ),
+                **test_declaration.retina_params,
             },
         },
     }
@@ -508,6 +511,7 @@ def check_metrics_criteria(
             test_configuration.expected_nof_kos,
         ),
         _create_viavi_result("Errors" + (" & warnings" if warning_as_errors else ""), gnb_error_count, operator.eq, 0),
+        _create_viavi_result("Viavi Warnings", len(viavi_kpis.warning_array), operator.lt, float("inf")),
         _create_viavi_result(
             "Procedure table", viavi_kpis.get_number_of_procedure_failures(_OMIT_VIAVI_FAILURE_LIST), operator.eq, 0
         ),

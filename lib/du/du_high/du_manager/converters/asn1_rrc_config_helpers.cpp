@@ -32,11 +32,6 @@ using namespace asn1::rrc_nr;
 
 namespace {
 
-asn1::rrc_nr::subcarrier_spacing_e get_asn1_scs(subcarrier_spacing scs)
-{
-  return asn1::rrc_nr::subcarrier_spacing_e{static_cast<asn1::rrc_nr::subcarrier_spacing_opts::options>(scs)};
-}
-
 /// Helper type used to generate ASN.1 diff
 struct rlc_bearer_config {
   lcid_t                  lcid;
@@ -2366,10 +2361,10 @@ static srs_res_s make_asn1_rrc_srs_res(const srs_config::srs_resource& cfg)
     case srs_group_or_sequence_hopping::neither:
       res.group_or_seq_hop = srs_res_s::group_or_seq_hop_opts::neither;
       break;
-    case srs_group_or_sequence_hopping::groupHopping:
+    case srs_group_or_sequence_hopping::group_hopping:
       res.group_or_seq_hop = srs_res_s::group_or_seq_hop_opts::group_hop;
       break;
-    case srs_group_or_sequence_hopping::sequenceHopping:
+    case srs_group_or_sequence_hopping::sequence_hopping:
       res.group_or_seq_hop = srs_res_s::group_or_seq_hop_opts::seq_hop;
       break;
     default:

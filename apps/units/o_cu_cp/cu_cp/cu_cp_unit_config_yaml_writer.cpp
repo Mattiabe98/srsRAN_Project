@@ -103,8 +103,9 @@ static YAML::Node build_cu_cp_amf_section(const cu_cp_unit_amf_config& config)
 {
   YAML::Node node;
 
-  node["no_core"] = config.no_core;
-  node["amf"]     = build_cu_cp_extra_amfs_item_section(config.amf);
+  node["no_core"]                     = config.no_core;
+  node["amf_reconnection_retry_time"] = config.amf_reconnection_retry_time;
+  node["amf"]                         = build_cu_cp_extra_amfs_item_section(config.amf);
 
   return node;
 }
@@ -298,10 +299,17 @@ static void fill_cu_cp_pcap_section(YAML::Node node, const cu_cp_unit_pcap_confi
   node["e1ap_enable"]   = config.e1ap.enabled;
 }
 
+static void fill_cu_cp_metrics_layers_section(YAML::Node node, const cu_cp_unit_metrics_layer_config& config)
+{
+  node["enable_pdcp"] = config.enable_pdcp;
+}
+
 static void fill_cu_cp_metrics_section(YAML::Node node, const cu_cp_unit_metrics_config& config)
 {
-  node["cu_cp_statistics_report_period"] = config.cu_cp_statistics_report_period;
-  node["pdcp_report_period"]             = config.pdcp.report_period;
+  auto perdiodicity_node                   = node["periodicity"];
+  perdiodicity_node["cu_cp_report_period"] = config.cu_cp_report_period;
+
+  fill_cu_cp_metrics_layers_section(node["layers"], config.layers_cfg);
 }
 
 static void fill_cu_cp_am_section(YAML::Node node, const cu_cp_unit_rlc_am_config& config)

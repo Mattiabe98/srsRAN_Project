@@ -42,9 +42,13 @@ public:
   virtual async_task<expected<positioning_information_response_t, positioning_information_failure_t>>
   handle_positioning_information_request(const positioning_information_request_t& request) = 0;
 
-  /// Handles the given measurement information request message.
+  /// Handles the given positioning activation request message.
+  virtual async_task<expected<positioning_activation_response_t, positioning_activation_failure_t>>
+  handle_positioning_activation_request(const positioning_activation_request_t& request) = 0;
+
+  /// Handles the given positioning measurement request message.
   virtual async_task<expected<measurement_response_t, measurement_failure_t>>
-  handle_measurement_information_request(const measurement_request_t& request) = 0;
+  handle_positioning_measurement_request(const measurement_request_t& request) = 0;
 };
 
 } // namespace srs_cu_cp

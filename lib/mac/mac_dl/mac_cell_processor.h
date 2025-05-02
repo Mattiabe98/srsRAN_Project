@@ -24,6 +24,7 @@
 
 #include "cell_dl_harq_buffer_pool.h"
 #include "dl_sch_pdu_assembler.h"
+#include "mac_cell_time_mapper_impl.h"
 #include "mac_dl_ue_repository.h"
 #include "mac_scheduler_cell_info_handler.h"
 #include "paging_pdu_assembler.h"
@@ -61,7 +62,9 @@ public:
 
   async_task<mac_cell_reconfig_response> reconfigure(const mac_cell_reconfig_request& request) override;
 
-  void handle_slot_indication(slot_point sl_tx) override;
+  mac_cell_time_mapper_impl& get_time_mapper() { return slot_time_mapper; }
+
+  void handle_slot_indication(const mac_cell_timing_context& context) override;
   void handle_error_indication(slot_point sl_tx, error_event event) override;
 
   /// Creates new UE DL context, updates logical channel MUX, adds UE in scheduler.
@@ -78,7 +81,7 @@ public:
   async_task<bool> remove_bearers(du_ue_index_t ue_index, span<const lcid_t> lcids_to_rem);
 
 private:
-  void handle_slot_indication_impl(slot_point sl_tx);
+  void handle_slot_indication_impl(slot_point sl_tx, std::chrono::high_resolution_clock::time_point enqueue_slot_tp);
 
   /// Assemble struct that is going to be passed down to PHY with the DL scheduling result.
   /// \remark FAPI will use this struct to generate a DL_TTI.Request.
@@ -131,9 +134,11 @@ private:
 
   /// Represents activation cell state.
   // Note: For now, cells start active.
-  enum class cell_state { inactive, active } state = cell_state::active;
+  enum class cell_state { inactive, active } state = cell_state::inactive;
 
   mac_pcap& pcap;
+
+  mac_cell_time_mapper_impl slot_time_mapper;
 
   bool sib1_pcap_dumped = false;
 };

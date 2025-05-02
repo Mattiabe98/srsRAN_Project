@@ -78,7 +78,7 @@ public:
                  pdcp_tx_config                  cfg_,
                  pdcp_tx_lower_notifier&         lower_dn_,
                  pdcp_tx_upper_control_notifier& upper_cn_,
-                 timer_factory                   ue_dl_timer_factory_,
+                 timer_factory                   ue_ctrl_timer_factory_,
                  task_executor&                  ue_dl_executor_,
                  task_executor&                  crypto_executor_,
                  pdcp_metrics_aggregator&        metrics_agg_);
@@ -131,9 +131,9 @@ public:
   {
     reset();
     st = st_;
-  };
+  }
 
-  const pdcp_tx_state& get_state() const { return st; };
+  const pdcp_tx_state& get_state() const { return st; }
 
   uint32_t nof_pdus_in_window() const { return st.tx_next - st.tx_next_ack; }
 
@@ -163,7 +163,7 @@ private:
   pdcp_rx_status_provider*        status_provider = nullptr;
   pdcp_tx_lower_notifier&         lower_dn;
   pdcp_tx_upper_control_notifier& upper_cn;
-  timer_factory                   ue_dl_timer_factory;
+  timer_factory                   ue_ctrl_timer_factory;
   unique_timer                    discard_timer;
   unique_timer                    metrics_timer;
 

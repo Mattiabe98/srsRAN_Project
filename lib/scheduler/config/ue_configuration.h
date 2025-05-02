@@ -82,6 +82,9 @@ struct search_space_info {
 
   const pdsch_config_params& get_pdsch_config(unsigned pdsch_td_res_index, unsigned nof_layers) const
   {
+    srsran_assert(pdsch_cfg_list.size() > pdsch_td_res_index and
+                      pdsch_cfg_list[pdsch_td_res_index].size() >= nof_layers,
+                  "get_pdsch_config: Invalid params");
     return pdsch_cfg_list[pdsch_td_res_index][nof_layers - 1];
   }
 
@@ -165,7 +168,18 @@ public:
   unsigned get_nof_dl_ports() const { return nof_dl_ports; }
 
   /// Determines whether DL allocations are possible in the provided slot.
-  bool is_dl_enabled(slot_point dl_slot) const;
+  bool is_dl_enabled(slot_point dl_slot) const
+  {
+    if (not cell_cfg_common.is_dl_enabled(dl_slot)) {
+      return false;
+    }
+    if (meas_gap_cfg.has_value()) {
+      if (is_inside_meas_gap(meas_gap_cfg.value(), dl_slot)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /// Determines whether UL allocations are possible in the provided slot.
   bool is_ul_enabled(slot_point ul_slot) const;

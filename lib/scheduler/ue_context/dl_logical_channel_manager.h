@@ -58,14 +58,17 @@ public:
   /// Set UE fallback state.
   void set_fallback_state(bool enter_fallback);
 
+  /// Setups up an observer for DL pending data for a given RAN slice.
+  void register_ran_slice(ran_slice_id_t slice_id);
+
   /// Assign a RAN slice to a logical channel.
-  void set_ran_slice(lcid_t lcid, ran_slice_id_t slice_id);
+  void set_lcid_ran_slice(lcid_t lcid, ran_slice_id_t slice_id);
 
   /// Detach logical channel from previously set RAN slice.
-  void reset_ran_slice(lcid_t lcid);
+  void reset_lcid_ran_slice(lcid_t lcid);
 
   /// Remove RAN slice and detach all associated logical channels.
-  void deactivate(ran_slice_id_t slice_id);
+  void deregister_ran_slice(ran_slice_id_t slice_id);
 
   /// Determines whether a RAN slice has at least one bearer associated with it.
   bool has_slice(ran_slice_id_t slice_id) const
@@ -153,8 +156,10 @@ public:
   /// \brief Update DL buffer status for a given LCID.
   void handle_dl_buffer_status_indication(lcid_t lcid, unsigned buffer_status, slot_point hol_toa = {})
   {
+    // We apply this limit to avoid potential overflows.
+    static constexpr unsigned max_buffer_status = 1U << 24U;
     srsran_sanity_check(lcid < MAX_NOF_RB_LCIDS, "Max LCID value 32 exceeded");
-    channels[lcid].buf_st  = buffer_status;
+    channels[lcid].buf_st  = std::min(buffer_status, max_buffer_status);
     channels[lcid].hol_toa = hol_toa;
   }
 

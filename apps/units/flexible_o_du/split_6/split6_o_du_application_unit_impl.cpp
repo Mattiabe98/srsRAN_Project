@@ -21,7 +21,7 @@
  */
 
 #include "split6_o_du_application_unit_impl.h"
-#include "apps/services/e2/e2_metric_connector_manager.h"
+#include "apps/helpers/e2/e2_metric_connector_manager.h"
 #include "apps/units/flexible_o_du/o_du_high/du_high/du_high_config_translators.h"
 #include "apps/units/flexible_o_du/o_du_high/o_du_high_unit_config_translators.h"
 #include "apps/units/flexible_o_du/o_du_high/o_du_high_unit_config_yaml_writer.h"
@@ -49,6 +49,11 @@ void split6_o_du_application_unit_impl::on_loggers_registration()
 {
   register_split6_o_du_loggers(unit_cfg);
   plugin->on_loggers_registration();
+}
+
+bool split6_o_du_application_unit_impl::are_metrics_enabled() const
+{
+  return unit_cfg.odu_high_cfg.du_high_cfg.config.metrics.layers_cfg.are_metrics_enabled();
 }
 
 void split6_o_du_application_unit_impl::on_configuration_parameters_autoderivation(CLI::App& app)

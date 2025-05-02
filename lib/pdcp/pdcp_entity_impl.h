@@ -60,7 +60,7 @@ public:
                                           config.get_tx_config(),
                                           tx_lower_dn,
                                           tx_upper_cn,
-                                          ue_dl_timer_factory,
+                                          ue_ctrl_timer_factory,
                                           ue_dl_executor,
                                           crypto_executor,
                                           metrics_agg);
@@ -69,7 +69,7 @@ public:
                                           config.get_rx_config(),
                                           rx_upper_dn,
                                           rx_upper_cn,
-                                          ue_ul_timer_factory,
+                                          ue_ctrl_timer_factory,
                                           ue_ul_executor,
                                           crypto_executor,
                                           max_nof_crypto_workers,
@@ -80,11 +80,11 @@ public:
     rx->set_status_handler(tx.get());
   }
   ~pdcp_entity_impl() override { stop(); }
-  pdcp_tx_upper_control_interface& get_tx_upper_control_interface() final { return (*tx); };
-  pdcp_tx_upper_data_interface&    get_tx_upper_data_interface() final { return (*tx); };
-  pdcp_tx_lower_interface&         get_tx_lower_interface() final { return (*tx); };
-  pdcp_rx_upper_control_interface& get_rx_upper_control_interface() final { return (*rx); };
-  pdcp_rx_lower_interface&         get_rx_lower_interface() final { return (*rx); };
+  pdcp_tx_upper_control_interface& get_tx_upper_control_interface() final { return (*tx); }
+  pdcp_tx_upper_data_interface&    get_tx_upper_data_interface() final { return (*tx); }
+  pdcp_tx_lower_interface&         get_tx_lower_interface() final { return (*tx); }
+  pdcp_rx_upper_control_interface& get_rx_upper_control_interface() final { return (*rx); }
+  pdcp_rx_lower_interface&         get_rx_lower_interface() final { return (*rx); }
 
   void stop() override
   {

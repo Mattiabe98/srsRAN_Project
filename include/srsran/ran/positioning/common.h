@@ -22,7 +22,17 @@
 
 #pragma once
 
+#include "srsran/ran/csi_rs/csi_rs_id.h"
+#include "srsran/ran/cyclic_prefix.h"
+#include "srsran/ran/pci.h"
+#include "srsran/ran/scs_specific_carrier.h"
+#include "srsran/ran/srs/srs_configuration.h"
+#include "srsran/ran/ssb_properties.h"
+#include "srsran/ran/subcarrier_spacing.h"
 #include <cstdint>
+#include <optional>
+#include <variant>
+#include <vector>
 
 namespace srsran {
 
@@ -68,6 +78,109 @@ struct ng_ran_access_point_position_t {
   uint8_t                 orientation_of_major_axis;
   uint8_t                 uncertainty_altitude;
   uint8_t                 confidence;
+};
+
+struct ssb_burst_position_t {
+  enum class bitmap_type_t : uint8_t { /* uint8_t */ short_bitmap,
+                                       /* uint8_t */ medium_bitmap,
+                                       /* uint64_t */ long_bitmap };
+
+  bitmap_type_t type;
+  uint64_t      bitmap;
+};
+
+// Time in seconds relative to 00:00:00 on 1 January 1900 (calculated as continuous time without leap seconds and
+// traceable to a common time reference) where binary encoding of the integer part is in the first 32 bits and binary
+// encoding of the fraction part in the last 32 bits. The fraction part is expressed with a granularity of 1 /2**32
+// second
+using relative_time_1900_t = uint64_t;
+
+struct tf_config_t {
+  uint32_t                            ssb_freq;
+  subcarrier_spacing                  ssb_subcarrier_spacing;
+  int8_t                              ssb_tx_pwr;
+  ssb_periodicity                     ssb_period;
+  uint8_t                             ssb_half_frame_offset;
+  uint8_t                             ssb_sfn_offset;
+  std::optional<ssb_burst_position_t> ssb_burst_position;
+  std::optional<relative_time_1900_t> sfn_initialization_time;
+};
+
+struct ssb_info_item_t {
+  tf_config_t ssb_cfg;
+  pci_t       pci_nr;
+};
+
+struct ssb_info_t {
+  std::vector<ssb_info_item_t> list_of_ssb_info;
+};
+
+struct ssb_t {
+  pci_t                  pci_nr;
+  std::optional<uint8_t> ssb_idx;
+
+  bool operator==(const ssb_t& rhs) const { return pci_nr == rhs.pci_nr && ssb_idx == rhs.ssb_idx; }
+  bool operator!=(const ssb_t& rhs) const { return !(rhs == *this); }
+};
+
+struct time_stamp_slot_idx_t {
+  enum class idx_type { scs15, scs30, scs60, scs120 };
+
+  idx_type type;
+  uint8_t  value;
+};
+
+struct time_stamp_t {
+  uint16_t                sys_frame_num;
+  time_stamp_slot_idx_t   slot_idx;
+  std::optional<uint64_t> meas_time;
+};
+
+struct dl_prs_t {
+  uint16_t               prs_id;
+  uint8_t                dl_prs_res_set_id;
+  std::optional<uint8_t> dl_prs_res_id;
+
+  bool operator==(const dl_prs_t& rhs) const
+  {
+    return prs_id == rhs.prs_id && dl_prs_res_set_id == rhs.dl_prs_res_set_id && dl_prs_res_id == rhs.dl_prs_res_id;
+  }
+  bool operator!=(const dl_prs_t& rhs) const { return !(rhs == *this); }
+};
+
+struct spatial_relation_info_t {
+  using reference_signal =
+      std::variant<nzp_csi_rs_res_id_t, ssb_t, srs_config::srs_res_id, srs_config::srs_pos_res_id, dl_prs_t>;
+
+  std::vector<reference_signal> reference_signals;
+
+  bool operator==(const spatial_relation_info_t& rhs) const { return reference_signals == rhs.reference_signals; }
+  bool operator!=(const spatial_relation_info_t& rhs) const { return !(rhs == *this); }
+};
+
+struct active_ul_bwp_t {
+  uint16_t            location_and_bw;
+  subcarrier_spacing  scs;
+  cyclic_prefix       cp;
+  uint16_t            tx_direct_current_location;
+  std::optional<bool> shift7dot5k_hz;
+  srs_config          srs_cfg;
+};
+
+struct srs_carrier_list_item_t {
+  uint32_t                          point_a;
+  std::vector<scs_specific_carrier> ul_ch_bw_per_scs_list;
+  active_ul_bwp_t                   active_ul_bwp;
+  std::optional<pci_t>              pci_nr;
+};
+
+struct srs_configuration_t {
+  std::vector<srs_carrier_list_item_t> srs_carrier_list;
+};
+
+struct trp_tx_teg_info_t {
+  uint8_t trp_tx_teg_id;
+  uint8_t trp_tx_timing_error_margin;
 };
 
 } // namespace srsran

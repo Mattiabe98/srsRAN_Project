@@ -172,15 +172,15 @@ protected:
     uint32_t n_bsr = tester->bsr_count;
 
     // Push "n_pdus" SDUs into RLC
-    auto                                  sdu_bufs = std::vector<byte_buffer>(n_pdus);
-    std::chrono::system_clock::time_point t_start  = std::chrono::high_resolution_clock::now();
+    auto sdu_bufs = std::vector<byte_buffer>(n_pdus);
+    auto t_start  = std::chrono::steady_clock::now();
     for (uint32_t i = 0; i < n_pdus; i++) {
       sdu_bufs[i] = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, /* is_srb = */ false, i, sdu_size, i);
 
       // write SDU into upper end
       rlc->handle_sdu(sdu_bufs[i].deep_copy().value(), false); // keep local copy for later comparison
     }
-    std::chrono::system_clock::time_point t_end = std::chrono::high_resolution_clock::now();
+    auto t_end = std::chrono::steady_clock::now();
     pcell_worker.run_pending_tasks();
     EXPECT_EQ(tester->bsr_count, ++n_bsr);
 
@@ -255,15 +255,15 @@ protected:
     EXPECT_LT(pdu_size, sdu_size + header_min_size) << "PDU size fits whole SDU; PDUs won't be segmented";
 
     // Push "n_sdus" SDUs into RLC
-    auto                                  sdu_bufs = std::vector<byte_buffer>(n_sdus);
-    std::chrono::system_clock::time_point t_start  = std::chrono::high_resolution_clock::now();
+    auto sdu_bufs = std::vector<byte_buffer>(n_sdus);
+    auto t_start  = std::chrono::steady_clock::now();
     for (uint32_t i = 0; i < n_sdus; i++) {
       sdu_bufs[i] = test_helpers::create_pdcp_pdu(config.pdcp_sn_len, /* is_srb = */ false, i, sdu_size, i);
 
       // write SDU into upper end
       rlc->handle_sdu(sdu_bufs[i].deep_copy().value(), false); // keep local copy for later comparison
     }
-    std::chrono::system_clock::time_point t_end = std::chrono::high_resolution_clock::now();
+    auto t_end = std::chrono::steady_clock::now();
     pcell_worker.run_pending_tasks();
     EXPECT_EQ(tester->bsr_count, ++n_bsr);
 
@@ -1329,6 +1329,34 @@ TEST_P(rlc_tx_am_test, retx_pdu_segment_invalid_so_start_larger_than_so_end)
   EXPECT_EQ(tester->highest_delivered_pdcp_sn_list.front(), 2);
 }
 
+TEST_P(rlc_tx_am_test, tx_huge_bursts_report_buffer_state_correctly)
+{
+  const uint32_t sdu_size        = 1500;
+  const uint32_t header_min_size = sn_size == rlc_am_sn_size::size12bits ? 2 : 3;
+  const uint32_t num_sdus        = 2 * (MAX_DL_PDU_LENGTH / sdu_size);
+  const uint32_t num_pdus        = num_sdus;
+
+  // Push many SDUs into RLC above MAX_DL_PDU_LENGTH to limit excessive buffer state reports
+  tx_full_pdus(num_pdus, sdu_size);
+
+  // Queried buffer state should be up to date
+  rlc_buffer_state bs1 = rlc->get_buffer_state();
+  EXPECT_EQ(bs1.pending_bytes, 0);
+  // Notified buffer state should reflect the filled RLC before pulling any PDUs
+  EXPECT_EQ(tester->bsr.pending_bytes, num_pdus * (sdu_size + header_min_size));
+  EXPECT_EQ(tester->bsr_count, 1);
+
+  // Push again many SDUs into RLC1 above MAX_DL_PDU_LENGTH; expect one new buffer status report
+  tx_full_pdus(num_pdus, sdu_size);
+
+  // Queried buffer state should be up to date
+  bs1 = rlc->get_buffer_state();
+  EXPECT_EQ(bs1.pending_bytes, 0);
+  // Notified buffer state should reflect the re-filled RLC before pulling any PDUs
+  EXPECT_EQ(tester->bsr.pending_bytes, num_pdus * (sdu_size + header_min_size));
+  EXPECT_EQ(tester->bsr_count, 2);
+}
+
 TEST_P(rlc_tx_am_test, retx_many_pdus_and_notify_mac)
 {
   const uint32_t sdu_size        = 1500;
@@ -1375,14 +1403,14 @@ TEST_P(rlc_tx_am_test, retx_hol_toa_has_priority)
   const uint32_t n_pdus          = 5;
 
   // Send first bunch of SDUs of which one will be ReTx'ed
-  std::chrono::system_clock::time_point t_retx_start = std::chrono::high_resolution_clock::now();
-  std::vector<std::vector<uint8_t>>     pdus         = tx_full_pdus(n_pdus, sdu_size);
-  std::chrono::system_clock::time_point t_retx_end   = std::chrono::high_resolution_clock::now();
+  auto                              t_retx_start = std::chrono::steady_clock::now();
+  std::vector<std::vector<uint8_t>> pdus         = tx_full_pdus(n_pdus, sdu_size);
+  auto                              t_retx_end   = std::chrono::steady_clock::now();
 
   // Put another SDU in SDU queue
-  std::chrono::system_clock::time_point t_tx_start = std::chrono::high_resolution_clock::now();
+  auto t_tx_start = std::chrono::steady_clock::now();
   rlc->handle_sdu(test_helpers::create_pdcp_pdu(config.pdcp_sn_len, /* is_srb = */ false, 0, sdu_size, 0), false);
-  std::chrono::system_clock::time_point t_tx_end = std::chrono::high_resolution_clock::now();
+  auto t_tx_end = std::chrono::steady_clock::now();
   pcell_worker.run_pending_tasks();
   rlc_buffer_state bs = rlc->get_buffer_state();
   EXPECT_EQ(bs.pending_bytes, pdu_size);

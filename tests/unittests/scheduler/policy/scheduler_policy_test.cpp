@@ -27,6 +27,7 @@
 #include "lib/scheduler/slicing/inter_slice_scheduler.h"
 #include "lib/scheduler/uci_scheduling/uci_allocator_impl.h"
 #include "lib/scheduler/ue_context/ue.h"
+#include "lib/scheduler/ue_scheduling/intra_slice_scheduler.h"
 #include "lib/scheduler/ue_scheduling/ue_cell_grid_allocator.h"
 #include "tests/test_doubles/scheduler/scheduler_config_helper.h"
 #include "tests/unittests/scheduler/test_utils/dummy_test_components.h"
@@ -64,13 +65,13 @@ protected:
     cell_cfg(*[this, &msg]() {
       return cell_cfg_list.emplace(to_du_cell_index(0), std::make_unique<cell_configuration>(sched_cfg, msg)).get();
     }()),
-    slice_sched(cell_cfg, ues)
+    slice_sched(cell_cfg, ues),
+    intra_slice_sched(cell_cfg.expert_cfg.ue, ues, pdcch_alloc, uci_alloc, res_grid, cell_harqs, logger)
   {
     logger.set_level(srslog::basic_levels::debug);
     srslog::init();
 
     cfg_pool.add_cell(msg);
-    grid_alloc.add_cell(to_du_cell_index(0), pdcch_alloc, uci_alloc, res_grid);
   }
 
   ~base_scheduler_policy_test() { srslog::flush(); }
@@ -80,28 +81,19 @@ protected:
     logger.set_context(next_slot.sfn(), next_slot.slot_index());
 
     res_grid.slot_indication(next_slot);
-    grid_alloc.slot_indication(next_slot);
     cell_harqs.slot_indication(next_slot);
     pdcch_alloc.slot_indication(next_slot);
     pucch_alloc.slot_indication(next_slot);
     uci_alloc.slot_indication(next_slot);
-
+    intra_slice_sched.slot_indication(next_slot);
     slice_sched.slot_indication(next_slot, res_grid);
 
     if (cell_cfg.is_dl_enabled(next_slot)) {
-      auto dl_slice_candidate = slice_sched.get_next_dl_candidate();
-      while (dl_slice_candidate.has_value()) {
-        auto&                  policy = slice_sched.get_policy(dl_slice_candidate->id());
-        slice_dl_sched_context ctxt{res_grid, *dl_slice_candidate, grid_alloc, cell_harqs.pending_dl_retxs()};
-        policy.dl_sched(ctxt);
-        dl_slice_candidate = slice_sched.get_next_dl_candidate();
+      while (auto dl_slice_candidate = slice_sched.get_next_dl_candidate()) {
+        intra_slice_sched.dl_sched(dl_slice_candidate.value(), slice_sched.get_policy(dl_slice_candidate->id()));
       }
-      auto ul_slice_candidate = slice_sched.get_next_ul_candidate();
-      while (ul_slice_candidate.has_value()) {
-        auto&                  policy = slice_sched.get_policy(ul_slice_candidate->id());
-        slice_ul_sched_context ctxt{res_grid, *ul_slice_candidate, grid_alloc, cell_harqs.pending_ul_retxs()};
-        policy.ul_sched(ctxt);
-        ul_slice_candidate = slice_sched.get_next_ul_candidate();
+      while (auto ul_slice_candidate = slice_sched.get_next_ul_candidate()) {
+        intra_slice_sched.ul_sched(ul_slice_candidate.value(), slice_sched.get_policy(ul_slice_candidate->id()));
       }
     }
 
@@ -199,12 +191,12 @@ protected:
                                MAX_NOF_HARQS,
                                std::make_unique<scheduler_harq_timeout_dummy_notifier>()};
   pdcch_resource_allocator_impl pdcch_alloc{cell_cfg};
-  pucch_allocator_impl   pucch_alloc{cell_cfg, sched_cfg.ue.max_pucchs_per_slot, sched_cfg.ue.max_ul_grants_per_slot};
-  uci_allocator_impl     uci_alloc{pucch_alloc};
-  ue_repository          ues;
-  ue_cell_grid_allocator grid_alloc{sched_cfg.ue, ues, logger};
+  pucch_allocator_impl pucch_alloc{cell_cfg, sched_cfg.ue.max_pucchs_per_slot, sched_cfg.ue.max_ul_grants_per_slot};
+  uci_allocator_impl   uci_alloc{pucch_alloc};
+  ue_repository        ues;
   // NOTE: Policy scheduler is part of RAN slice instances created in slice scheduler.
   inter_slice_scheduler slice_sched;
+  intra_slice_scheduler intra_slice_sched;
 
   slot_point next_slot{0, test_rgen::uniform_int<unsigned>(0, 10239)};
 };
@@ -387,15 +379,16 @@ TEST_P(scheduler_policy_test, scheduler_allocates_ues_with_dl_retx_first_than_ue
   if (pucch.crnti == u1.crnti) {
     ue_with_retx = u1.ue_index;
     for (unsigned harq_bit_idx = 0; harq_bit_idx < nof_ack_bits; ++harq_bit_idx) {
-      u1.get_pcell().handle_dl_ack_info(current_slot, mac_harq_ack_report_status::ack, harq_bit_idx, 100);
+      u1.get_pcell().handle_dl_ack_info(current_slot, mac_harq_ack_report_status::nack, harq_bit_idx, 100);
     }
   } else if (pucch.crnti == u2.crnti) {
     ue_with_retx = u2.ue_index;
     for (unsigned harq_bit_idx = 0; harq_bit_idx < nof_ack_bits; ++harq_bit_idx) {
-      u2.get_pcell().handle_dl_ack_info(current_slot, mac_harq_ack_report_status::ack, harq_bit_idx, 100);
+      u2.get_pcell().handle_dl_ack_info(current_slot, mac_harq_ack_report_status::nack, harq_bit_idx, 100);
     }
   }
 
+  run_slot();
   pdsch_scheduled = run_until([this]() { return not this->res_grid[0].result.dl.ue_grants.empty(); });
   ASSERT_TRUE(pdsch_scheduled);
   ASSERT_EQ(this->res_grid[0].result.dl.ue_grants[0].context.ue_index, ue_with_retx);
@@ -644,8 +637,8 @@ TEST_F(scheduler_pf_test, pf_ensures_fairness_in_dl_when_ues_have_different_chan
 
   // PF scheduler ensures fairness by scheduling UE2 more than UE1 and UE3 due to having worse channel conditions when
   // compared to that of UE1 and UE3.
-  ASSERT_TRUE(ue_pdsch_scheduled_count[u2.ue_index] > ue_pdsch_scheduled_count[u1.ue_index] and
-              ue_pdsch_scheduled_count[u2.ue_index] > ue_pdsch_scheduled_count[u3.ue_index]);
+  ASSERT_GT(ue_pdsch_scheduled_count[u2.ue_index], ue_pdsch_scheduled_count[u1.ue_index]);
+  ASSERT_GT(ue_pdsch_scheduled_count[u2.ue_index], ue_pdsch_scheduled_count[u3.ue_index]);
 }
 
 TEST_F(scheduler_pf_test, pf_ensures_fairness_in_ul_when_ues_have_different_channel_conditions)

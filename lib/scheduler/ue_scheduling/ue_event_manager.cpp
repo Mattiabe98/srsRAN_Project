@@ -131,11 +131,11 @@ private:
 
 class srsran::pdu_indication_pool
 {
-  constexpr static size_t UCI_INITIAL_POOL_SIZE = MAX_PUCCH_PDUS_PER_SLOT;
-  constexpr static size_t PHR_INITIAL_POOL_SIZE = 8;
-  constexpr static size_t CRC_INITIAL_POOL_SIZE = MAX_PUSCH_PDUS_PER_SLOT;
-  constexpr static size_t SRS_INITIAL_POOL_SIZE = MAX_SRS_PDUS_PER_SLOT;
-  constexpr static size_t BSR_INITIAL_POOL_SIZE = MAX_PUSCH_PDUS_PER_SLOT;
+  static constexpr size_t UCI_INITIAL_POOL_SIZE = MAX_PUCCH_PDUS_PER_SLOT;
+  static constexpr size_t PHR_INITIAL_POOL_SIZE = 8;
+  static constexpr size_t CRC_INITIAL_POOL_SIZE = MAX_PUSCH_PDUS_PER_SLOT;
+  static constexpr size_t SRS_INITIAL_POOL_SIZE = MAX_SRS_PDUS_PER_SLOT;
+  static constexpr size_t BSR_INITIAL_POOL_SIZE = MAX_PUSCH_PDUS_PER_SLOT;
 
 public:
   using uci_ptr     = unbounded_object_pool<uci_indication::uci_pdu>::ptr;
@@ -966,6 +966,17 @@ void ue_event_manager::add_cell(const cell_creation_event& cell_ev)
   while (cell_specific_events.size() <= cell_index) {
     cell_specific_events.emplace_back(CELL_EVENT_LIST_SIZE);
   }
+}
+
+void ue_event_manager::rem_cell(du_cell_index_t cell_index)
+{
+  // Flush pending cell-specific events.
+  cell_event_t ev{INVALID_DU_UE_INDEX, [](ue_cell&) {}, "invalid", true};
+  while (cell_specific_events[cell_index].try_pop(ev)) {
+  }
+
+  // Remove cell entry.
+  du_cells[cell_index] = {};
 }
 
 bool ue_event_manager::cell_exists(du_cell_index_t cell_index) const

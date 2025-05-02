@@ -39,21 +39,24 @@ uint32_t e2sm_rc_control_action_du_executor_base::get_action_id()
   return action_id;
 }
 
-bool e2sm_rc_control_action_du_executor_base::fill_ran_function_description(
-    asn1::e2sm::ran_function_definition_ctrl_action_item_s& action_item)
+ran_function_definition_ctrl_action_item_s e2sm_rc_control_action_du_executor_base::get_control_action_definition()
 {
+  ran_function_definition_ctrl_action_item_s action_item;
   action_item.ric_ctrl_action_id = action_id;
+  action_item.ric_ctrl_action_name.resize(action_name.size());
   action_item.ric_ctrl_action_name.from_string(action_name);
 
   for (auto& ran_p : action_params) {
     ctrl_action_ran_param_item_s ctrl_action_ran_param_item;
     ctrl_action_ran_param_item.ran_param_id = ran_p.first;
+    ctrl_action_ran_param_item.ran_param_name.resize(ran_p.second.size());
     ctrl_action_ran_param_item.ran_param_name.from_string(ran_p.second);
     action_item.ran_ctrl_action_params_list.push_back(ctrl_action_ran_param_item);
   }
 
-  return true;
+  return action_item;
 }
+
 async_task<e2sm_ric_control_response>
 e2sm_rc_control_action_du_executor_base::return_ctrl_failure(const e2sm_ric_control_request& req)
 {
@@ -85,7 +88,7 @@ e2sm_rc_control_action_2_6_du_executor::e2sm_rc_control_action_2_6_du_executor(
   action_params.insert({11, "Min PRB Policy Ratio"});
   action_params.insert({12, "Max PRB Policy Ratio"});
   action_params.insert({13, "Dedicated PRB Policy Ratio"});
-};
+}
 
 void e2sm_rc_control_action_2_6_du_executor::parse_action_ran_parameter_value(
     const ran_param_value_type_c&        ran_param,
@@ -202,7 +205,7 @@ bool e2sm_rc_control_action_2_6_du_executor::ric_control_action_supported(const 
     }
   };
   return true;
-};
+}
 
 async_task<e2sm_ric_control_response>
 e2sm_rc_control_action_2_6_du_executor::execute_ric_control_action(const e2sm_ric_control_request& req)
@@ -219,7 +222,7 @@ e2sm_rc_control_action_2_6_du_executor::execute_ric_control_action(const e2sm_ri
         e2sm_ric_control_response e2_resp = convert_to_e2sm_response(ctrl_config, ctrl_response);
         CORO_RETURN(e2_resp);
       });
-};
+}
 
 srs_du::du_mac_sched_control_config
 e2sm_rc_control_action_2_6_du_executor::convert_to_du_config_request(const e2sm_ric_control_request& e2sm_req_)

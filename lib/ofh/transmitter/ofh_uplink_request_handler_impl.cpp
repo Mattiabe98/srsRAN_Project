@@ -21,6 +21,8 @@
  */
 
 #include "ofh_uplink_request_handler_impl.h"
+#include "helpers.h"
+#include "srsran/ofh/ofh_error_notifier.h"
 #include "srsran/phy/support/shared_resource_grid.h"
 #include "srsran/ran/prach/prach_configuration.h"
 #include "srsran/ran/prach/prach_frequency_mapping.h"
@@ -29,6 +31,20 @@
 
 using namespace srsran;
 using namespace ofh;
+
+namespace {
+/// Open Fronthaul error notifier dummy implementation.
+class error_notifier_dummy : public error_notifier
+{
+public:
+  void on_late_downlink_message(const error_context& context) override {}
+  void on_late_uplink_message(const error_context& context) override {}
+};
+
+} // namespace
+
+/// Dummy error notifier for the uplink request handler construction.
+static error_notifier_dummy dummy_err_notifier;
 
 /// Determines and returns Open Fronthaul filter index type given the PRACH preamble info and associated context.
 static filter_index_type get_prach_cplane_filter_index(const prach_buffer_context&       context,
@@ -49,27 +65,49 @@ static filter_index_type get_prach_cplane_filter_index(const prach_buffer_contex
   return filter_index_type::ul_prach_preamble_short;
 }
 
+/// Returns timing parameters with only UL parameters copied from the input, others set to zero.
+static tx_window_timing_parameters extract_ul_cp_timing(const tx_window_timing_parameters tx_timing_params)
+{
+  return tx_window_timing_parameters{.sym_cp_dl_start = 0,
+                                     .sym_cp_dl_end   = 0,
+                                     .sym_cp_ul_start = tx_timing_params.sym_cp_ul_start,
+                                     .sym_cp_ul_end   = tx_timing_params.sym_cp_ul_end,
+                                     .sym_up_dl_start = 0,
+                                     .sym_up_dl_end   = 0};
+}
+
 uplink_request_handler_impl::uplink_request_handler_impl(const uplink_request_handler_impl_config&  config,
                                                          uplink_request_handler_impl_dependencies&& dependencies) :
-  logger(*dependencies.logger),
+  logger(dependencies.logger),
   is_prach_cp_enabled(config.is_prach_cp_enabled),
   cp(config.cp),
   tdd_config(config.tdd_config),
   prach_eaxc(config.prach_eaxc),
   ul_eaxc(config.ul_data_eaxc),
+  window_checker(dependencies.logger,
+                 config.sector,
+                 calculate_nof_symbols_before_ota(config.cp,
+                                                  config.scs,
+                                                  config.ul_processing_time,
+                                                  extract_ul_cp_timing(config.tx_timing_params)),
+                 get_nsymb_per_slot(config.cp)),
   ul_slot_repo(std::move(dependencies.ul_slot_repo)),
   ul_prach_repo(std::move(dependencies.ul_prach_repo)),
+  notifier_symbol_repo(std::move(dependencies.notifier_symbol_repo)),
   data_flow(std::move(dependencies.data_flow)),
-  frame_pool(std::move(dependencies.frame_pool))
+  frame_pool(std::move(dependencies.frame_pool)),
+  err_notifier(dependencies.err_notifier),
+  metrics_collector(data_flow->get_metrics_collector(), window_checker)
 {
   srsran_assert(ul_slot_repo, "Invalid uplink repository");
   srsran_assert(ul_prach_repo, "Invalid PRACH repository");
+  srsran_assert(notifier_symbol_repo, "Invalid notified uplink grid symbol repository");
   srsran_assert(data_flow, "Invalid data flow");
   srsran_assert(frame_pool, "Invalid frame pool");
 }
 
 /// Determines slot index where U-Plane packet is expected for long format PRACH.
-static slot_point get_long_prach_length_slots(const prach_buffer_context& context)
+static slot_point get_long_prach_expected_slot(const prach_buffer_context& context)
 {
   static constexpr unsigned nof_symbols_per_slot = get_nsymb_per_slot(cyclic_prefix::NORMAL);
   srsran_assert(is_long_preamble(context.format), "Long PRACH format expected");
@@ -120,9 +158,21 @@ static unsigned get_prach_start_symbol(const prach_buffer_context& context)
 
 void uplink_request_handler_impl::handle_prach_occasion(const prach_buffer_context& context, prach_buffer& buffer)
 {
-  logger.debug("Registering PRACH context entry for slot '{}' and sector#{}", context.slot, context.sector);
+  if (SRSRAN_UNLIKELY(logger.debug.enabled())) {
+    logger.debug("Registering PRACH context entry for slot '{}' and sector#{}", context.slot, context.sector);
+  }
 
   frame_pool->clear_uplink_slot(context.slot, context.sector, logger);
+
+  if (SRSRAN_UNLIKELY(window_checker.is_late(context.slot))) {
+    err_notifier.on_late_uplink_message({context.slot, context.sector});
+
+    logger.warning(
+        "Sector#{}: dropped late PRACH request in slot '{}'. No OFH data will be requested from an RU for this slot",
+        context.sector,
+        context.slot);
+    return;
+  }
 
   // Sampling rate defining the \f$T_s = 1/(\Delta f_{ref} \times N_{f,ref})\f$ parameter, see 3GPP TS38.211,
   // clause 4.1.
@@ -130,15 +180,16 @@ void uplink_request_handler_impl::handle_prach_occasion(const prach_buffer_conte
   static constexpr double ref_srate_Hz = 30.72e6;
 
   // Store the context in the repository, use correct slot index for long format accounting for PRACH duration.
+  auto slot_idx = context.slot;
   if (is_short_preamble(context.format)) {
     ul_prach_repo->add(context, buffer, std::nullopt, std::nullopt);
   } else {
     // Determine slot index where the PRACH U-Plane is expected.
-    slot_point slot = get_long_prach_length_slots(context);
+    slot_idx = get_long_prach_expected_slot(context);
     // Determine PRACH start symbol.
     unsigned start_symbol = get_prach_start_symbol(context);
 
-    ul_prach_repo->add(context, buffer, start_symbol, slot);
+    ul_prach_repo->add(context, buffer, start_symbol, slot_idx);
   }
 
   if (!is_prach_cp_enabled) {
@@ -162,7 +213,7 @@ void uplink_request_handler_impl::handle_prach_occasion(const prach_buffer_conte
   unsigned K         = (1000 * scs_to_khz(context.pusch_scs)) / ra_scs_to_Hz(preamble_info.scs);
 
   data_flow_cplane_scheduling_prach_context cp_prach_context;
-  cp_prach_context.slot            = context.slot;
+  cp_prach_context.slot            = slot_idx;
   cp_prach_context.nof_repetitions = preamble_info.nof_symbols;
   cp_prach_context.start_symbol    = get_prach_start_symbol(context);
   cp_prach_context.prach_scs       = preamble_info.scs;
@@ -183,19 +234,34 @@ void uplink_request_handler_impl::handle_prach_occasion(const prach_buffer_conte
 void uplink_request_handler_impl::handle_new_uplink_slot(const resource_grid_context& context,
                                                          const shared_resource_grid&  grid)
 {
-  logger.debug("Registering UL context entry for slot '{}' and sector#{}", context.slot, context.sector);
+  if (SRSRAN_UNLIKELY(logger.debug.enabled())) {
+    logger.debug("Registering UL context entry for slot '{}' and sector#{}", context.slot, context.sector);
+  }
 
   frame_pool->clear_uplink_slot(context.slot, context.sector, logger);
+
+  if (SRSRAN_UNLIKELY(window_checker.is_late(context.slot))) {
+    err_notifier.on_late_uplink_message({context.slot, context.sector});
+
+    logger.warning(
+        "Sector#{}: dropped late uplink request in slot '{}'. No OFH data will be requested from an RU for this slot",
+        context.sector,
+        context.slot);
+    return;
+  }
 
   data_flow_cplane_type_1_context df_context;
   df_context.slot         = context.slot;
   df_context.filter_type  = filter_index_type::standard_channel_filter;
   df_context.direction    = data_direction::uplink;
-  df_context.symbol_range = tdd_config ? get_active_tdd_ul_symbols(tdd_config.value(), context.slot.slot_index(), cp)
+  df_context.symbol_range = tdd_config ? get_active_tdd_ul_symbols(*tdd_config, context.slot.slot_index(), cp)
                                        : ofdm_symbol_range(0, get_nsymb_per_slot(cp));
 
   // Store the context in the repository.
   ul_slot_repo->add(context, grid, df_context.symbol_range);
+
+  // Add entry to the notified symbol repository.
+  notifier_symbol_repo->add(context.slot, df_context.symbol_range.start(), cp);
 
   for (auto eaxc : ul_eaxc) {
     df_context.eaxc = eaxc;
