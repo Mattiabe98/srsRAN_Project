@@ -34,7 +34,7 @@ enum class message_type { control_plane, user_plane, num_ofh_types };
 constexpr unsigned MAX_NOF_SUPPORTED_EAXC = 4;
 
 /// Maximum allowed value for eAxC ID.
-constexpr size_t MAX_SUPPORTED_EAXC_ID_VALUE = 32;
+constexpr size_t MAX_SUPPORTED_EAXC_ID_VALUE = 4620;
 
 } // namespace ofh
 } // namespace srsran
