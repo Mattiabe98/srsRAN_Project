@@ -1,3 +1,5 @@
+Forked to increase MAX_SUPPORTED_EAXC_ID_VALUE from 32 to 4620 to support multi-carrier O-RUs.
+==============
 srsRAN Project
 ==============
 
